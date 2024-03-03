@@ -23,16 +23,25 @@ import 'package:flutter_tools/src/migrations/xcode_thin_binary_build_phase_input
 import 'package:flutter_tools/src/reporting/reporting.dart';
 import 'package:flutter_tools/src/xcode_project.dart';
 import 'package:test/fake.dart';
+import 'package:unified_analytics/unified_analytics.dart';
 
 import '../../src/common.dart';
 import '../../src/fake_process_manager.dart';
+import '../../src/fakes.dart';
 
 void main () {
   group('iOS migration', () {
     late TestUsage testUsage;
+    late FakeAnalytics fakeAnalytics;
 
     setUp(() {
       testUsage = TestUsage();
+
+      final MemoryFileSystem fs = MemoryFileSystem.test();
+      fakeAnalytics = getInitializedFakeAnalyticsInstance(
+        fs: fs,
+        fakeFlutterVersion: FakeFlutterVersion(),
+      );
     });
 
     testWithoutContext('migrators succeed', () {
@@ -59,10 +68,12 @@ void main () {
         final RemoveFrameworkLinkAndEmbeddingMigration iosProjectMigration = RemoveFrameworkLinkAndEmbeddingMigration(
           project,
           testLogger,
-          testUsage
+          testUsage,
+          fakeAnalytics,
         );
         iosProjectMigration.migrate();
         expect(testUsage.events, isEmpty);
+        expect(fakeAnalytics.sentEvents, isEmpty);
 
         expect(xcodeProjectInfoFile.existsSync(), isFalse);
 
@@ -79,9 +90,11 @@ void main () {
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
         iosProjectMigration.migrate();
         expect(testUsage.events, isEmpty);
+        expect(fakeAnalytics.sentEvents, isEmpty);
 
         expect(xcodeProjectInfoFile.lastModifiedSync(), projectLastModified);
         expect(xcodeProjectInfoFile.readAsStringSync(), contents);
@@ -99,6 +112,7 @@ shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
         iosProjectMigration.migrate();
         expect(xcodeProjectInfoFile.readAsStringSync(), contents);
@@ -126,9 +140,11 @@ keep this 2
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
         iosProjectMigration.migrate();
         expect(testUsage.events, isEmpty);
+        expect(fakeAnalytics.sentEvents, isEmpty);
 
         expect(xcodeProjectInfoFile.readAsStringSync(), r'''
 keep this 1
@@ -147,11 +163,19 @@ keep this 2
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
 
         expect(iosProjectMigration.migrate, throwsToolExit(message: 'Your Xcode project requires migration'));
         expect(testUsage.events, contains(
           const TestUsageEvent('ios-migration', 'remove-frameworks', label: 'failure'),
+        ));
+        expect(fakeAnalytics.sentEvents, contains(
+          Event.appleUsageEvent(
+              workflow: 'ios-migration',
+              parameter: 'remove-frameworks',
+              result: 'failure',
+            )
         ));
       });
 
@@ -164,10 +188,18 @@ keep this 2
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
         expect(iosProjectMigration.migrate, throwsToolExit(message: 'Your Xcode project requires migration'));
         expect(testUsage.events, contains(
           const TestUsageEvent('ios-migration', 'remove-frameworks', label: 'failure'),
+        ));
+        expect(fakeAnalytics.sentEvents, contains(
+          Event.appleUsageEvent(
+              workflow: 'ios-migration',
+              parameter: 'remove-frameworks',
+              result: 'failure',
+            )
         ));
       });
 
@@ -180,10 +212,18 @@ keep this 2
           project,
           testLogger,
           testUsage,
+          fakeAnalytics,
         );
         expect(iosProjectMigration.migrate, throwsToolExit(message: 'Your Xcode project requires migration'));
         expect(testUsage.events, contains(
           const TestUsageEvent('ios-migration', 'remove-frameworks', label: 'failure'),
+        ));
+        expect(fakeAnalytics.sentEvents, contains(
+          Event.appleUsageEvent(
+              workflow: 'ios-migration',
+              parameter: 'remove-frameworks',
+              result: 'failure',
+            )
         ));
       });
     });
@@ -672,7 +712,7 @@ platform :ios, '12.0'
         project.xcodeProjectInfoFile = xcodeProjectInfoFile;
 
         xcodeProjectSchemeFile = memoryFileSystem.file('Runner.xcscheme');
-        project.xcodeProjectSchemeFile = xcodeProjectSchemeFile;
+        project.schemeFile = xcodeProjectSchemeFile;
       });
 
       testWithoutContext('skipped if files are missing', () {
@@ -696,13 +736,13 @@ platform :ios, '12.0'
 	objectVersion = 54;
 	objects = {
 			attributes = {
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
       ''';
         xcodeProjectInfoFile.writeAsStringSync(xcodeProjectInfoFileContents);
 
         const String xcodeProjectSchemeFileContents = '''
-   LastUpgradeVersion = "1430"
+   LastUpgradeVersion = "1510"
 ''';
         xcodeProjectSchemeFile.writeAsStringSync(xcodeProjectSchemeFileContents);
 
@@ -728,13 +768,13 @@ platform :ios, '12.0'
 	objectVersion = 46;
 	objects = {
 			attributes = {
-				LastUpgradeCheck = 1020;
+				LastUpgradeCheck = 1430;
 				ORGANIZATIONNAME = "";
 ''');
 
         xcodeProjectSchemeFile.writeAsStringSync('''
 <Scheme
-   LastUpgradeVersion = "1020"
+   LastUpgradeVersion = "1430"
    version = "1.3">
 ''');
 
@@ -750,13 +790,13 @@ platform :ios, '12.0'
 	objectVersion = 54;
 	objects = {
 			attributes = {
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 ''');
 
         expect(xcodeProjectSchemeFile.readAsStringSync(), '''
 <Scheme
-   LastUpgradeVersion = "1430"
+   LastUpgradeVersion = "1510"
    version = "1.3">
 ''');
         // Only print once even though 3 lines were changed.
@@ -1380,8 +1420,10 @@ class FakeIosProject extends Fake implements IosProject {
   @override
   File xcodeProjectInfoFile = MemoryFileSystem.test().file('xcodeProjectInfoFile');
 
+  File? schemeFile;
+
   @override
-  File xcodeProjectSchemeFile = MemoryFileSystem.test().file('xcodeProjectSchemeFile');
+  File xcodeProjectSchemeFile({String? scheme}) => schemeFile ?? MemoryFileSystem.test().file('xcodeProjectSchemeFile');
 
   @override
   File appFrameworkInfoPlist = MemoryFileSystem.test().file('appFrameworkInfoPlist');

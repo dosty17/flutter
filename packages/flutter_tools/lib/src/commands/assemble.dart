@@ -235,6 +235,7 @@ class AssembleCommand extends FlutterCommand {
       logger: globals.logger,
       processManager: globals.processManager,
       usage: globals.flutterUsage,
+      analytics: globals.analytics,
       platform: globals.platform,
       engineVersion: artifacts.isLocalEngine
         ? null
@@ -262,7 +263,7 @@ class AssembleCommand extends FlutterCommand {
 
     final Map<String, Object?> defineConfigJsonMap = extractDartDefineConfigJsonMap();
     final List<String> dartDefines = extractDartDefines(defineConfigJsonMap: defineConfigJsonMap);
-    if (dartDefines.isNotEmpty){
+    if (dartDefines.isNotEmpty) {
       results[kDartDefines] = dartDefines.join(',');
     }
 

@@ -81,8 +81,12 @@ class BuildAarCommand extends BuildSubCommand {
 
   @override
   Future<CustomDimensions> get usageValues async {
+<<<<<<< HEAD
 
     String projectType;
+=======
+    final String projectType;
+>>>>>>> 7482962148e8d758338d8a28f589f317e1e42ba4
     if (project.manifest.isModule) {
       projectType = 'module';
     } else if (project.manifest.isPlugin) {
@@ -125,6 +129,14 @@ class BuildAarCommand extends BuildSubCommand {
       'This cannot currently be configured.';
 
   @override
+  Future<void> validateCommand() async {
+    if (!project.manifest.isModule) {
+      throwToolExit('AARs can only be built from modules.');
+    }
+    await super.validateCommand();
+  }
+
+  @override
   Future<FlutterCommandResult> runCommand() async {
     if (_androidSdk == null) {
       exitWithNoSdkMessage();
@@ -161,7 +173,7 @@ class BuildAarCommand extends BuildSubCommand {
 
     displayNullSafetyMode(androidBuildInfo.first.buildInfo);
     await androidBuilder?.buildAar(
-      project: _getProject(),
+      project: project,
       target: targetFile.path,
       androidBuildInfo: androidBuildInfo,
       outputDirectoryPath: stringArg('output'),
